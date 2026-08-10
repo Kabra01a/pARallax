@@ -1,0 +1,30 @@
+{
+  "name": "parallax-app",
+  "version": "1.0.0",
+  "description": "pARallax mobile client - cut real-world objects with your camera and paste them into desktop image editors",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-community/hooks": "^3.0.0",
+    "expo": "~50.0.7",
+    "expo-camera": "~14.0.5",
+    "expo-haptics": "^14.0.0",
+    "expo-image-manipulator": "~11.8.0",
+    "expo-screen-orientation": "~6.4.1",
+    "expo-status-bar": "~1.11.1",
+    "react": "18.2.0",
+    "react-native": "0.73.4",
+    "react-native-svg": "^14.1.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@types/react": "~18.2.45",
+    "typescript": "^5.1.3"
+  },
+  "private": true
+}

@@ -1,0 +1,43 @@
+# ---- Secrets & local config ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# ---- Python ----
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Node / Expo ----
+node_modules/
+.expo/
+.expo-shared/
+web-build/
+web-report/
+npm-debug.*
+yarn-error.log
+
+# ---- Runtime artifacts (debug image dumps) ----
+server/*.png
+server/*.jpg
+server/*.jpeg
+server/tmp/
+*.psd
+
+# ---- Editors & OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

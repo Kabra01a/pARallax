@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img">
+<title>pARallax</title>
+<desc>Wordmark for pARallax, an augmented reality cut and paste tool</desc>
+<rect width="1200" height="300" fill="#0D1117"/>
+<g stroke="#1B2430" stroke-width="1">
+<line x1="0" y1="75" x2="1200" y2="75"/>
+<line x1="0" y1="150" x2="1200" y2="150"/>
+<line x1="0" y1="225" x2="1200" y2="225"/>
+<line x1="300" y1="0" x2="300" y2="300"/>
+<line x1="600" y1="0" x2="600" y2="300"/>
+<line x1="900" y1="0" x2="900" y2="300"/>
+</g>
+<text x="80" y="98" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="500" letter-spacing="5" fill="#22D3EE">AUGMENTED REALITY &#183; COMPUTER VISION</text>
+<text x="76" y="188" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="88" font-weight="700" letter-spacing="2">
+<tspan fill="#F59E0B">&#961;</tspan><tspan fill="#22D3EE">AR</tspan><tspan fill="#E6EDF3">ALLAX</tspan>
+</text>
+<text x="80" y="232" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" fill="#8B949E">The gap between what the camera sees and what the screen shows.</text>
+<g transform="translate(940 84)">
+<rect x="0" y="0" width="132" height="132" rx="10" fill="none" stroke="#22D3EE" stroke-width="2" stroke-dasharray="7 6" opacity="0.55"/>
+<rect x="46" y="34" width="132" height="132" rx="10" fill="#161F2C" stroke="#F59E0B" stroke-width="2.5"/>
+<circle cx="112" cy="100" r="21" fill="none" stroke="#F59E0B" stroke-width="2.5"/>
+<line x1="66" y1="66" x2="112" y2="100" stroke="#8B949E" stroke-width="1.5" stroke-dasharray="4 5"/>
+<circle cx="66" cy="66" r="5" fill="#22D3EE"/>
+<circle cx="112" cy="100" r="5" fill="#F59E0B"/>
+</g>
+</svg>
