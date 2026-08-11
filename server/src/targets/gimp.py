@@ -1,9 +1,16 @@
 """GIMP paste target, driven through the Script-Fu server.
 
 GIMP ships a Script-Fu server that evaluates Scheme sent over TCP. Enable it
-with Filters > Script-Fu > Start Server (default port 10008). Note that GIMP's
-UI appears frozen while the server runs — the plugin blocks the main thread.
-It is still fully functional over the socket.
+with Filters > Script-Fu > Start Server (default port 10008).
+
+Expect two things that look like faults and are not: GIMP's UI goes sluggish
+while the server runs, because the plugin blocks the main thread; and the
+Script-Fu Server Options window stays on screen permanently, unresponsive and
+impossible to close, because that plugin never returns. Both are normal. The
+socket keeps working throughout.
+
+If requests do start timing out, GIMP itself is wedged — usually from memory
+pressure — and the fix is to quit and reopen it, then restart the server.
 
 This is a cleaner integration than the Photoshop one: a socket and a Scheme
 string, with no shell, no osascript and no nested quoting. It also works on
@@ -110,8 +117,12 @@ class GimpTarget(PasteTarget):
 
         except socket.timeout as exc:
             raise TimeoutError(
-                f"GIMP did not respond within {self.timeout}s. An open modal "
-                f"dialog in GIMP blocks the Script-Fu server."
+                f"GIMP accepted the connection but did not respond within "
+                f"{self.timeout}s, so its main thread is stuck. Usually GIMP is "
+                f"overloaded — large layers and memory pressure do it. Quit GIMP, "
+                f"reopen it, and restart the Script-Fu server. Note the Script-Fu "
+                f"Server Options window staying on screen and unresponsive is "
+                f"normal while the server runs; it is not the cause."
             ) from exc
         except ConnectionRefusedError as exc:
             raise ConnectionError(

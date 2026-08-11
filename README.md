@@ -176,9 +176,12 @@ click Start. It listens on `127.0.0.1:10008`.
 > The Script-Fu server has **no authentication** — anything that can reach the
 > port runs arbitrary code. Keep it on localhost.
 
-> ⚠️ **Close the Script-Fu dialog after starting the server, and leave no GIMP
-> dialogs open.** Any modal window holds GIMP's main thread, so the server
-> accepts connections but never evaluates anything — pastes time out after 30s.
+> Two things will look broken and are not. The **Script-Fu Server Options window
+> stays on screen permanently** — unresponsive, and its close button and Cancel
+> do nothing — because the plugin never returns while serving. And **GIMP's UI
+> goes sluggish**, since the server holds the main thread. Leave the window
+> where it is; the socket works fine. Force-quitting GIMP is the only way to
+> dismiss it, which also stops the server.
 
 **Photoshop** (macOS only) — set `PASTE_TARGET=photoshop` and just have it open.
 

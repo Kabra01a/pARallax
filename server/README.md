@@ -78,9 +78,14 @@ the canvas as the pointed fraction of the screen. See `src/targets/base.py`.
 **"segmentation service unreachable"** — `SEGMENTATION_SERVICE_URL` is wrong or
 the service is down. Check with `curl`.
 
-**"GIMP did not respond within 30s"** — a modal dialog is open in GIMP, holding
-its main thread. Close every GIMP dialog, including the Script-Fu Server Options
-window, and retry.
+**"GIMP accepted the connection but did not respond"** — GIMP's main thread is
+stuck, almost always from memory pressure. Quit GIMP, reopen it, restart the
+Script-Fu server, and keep layer sizes sane (`PASTE_MAX_FRACTION` handles the
+common case). Delete accumulated `parallax-*` layers; a handful of full-resolution
+cutouts is hundreds of megabytes.
+
+Note the Script-Fu Server Options window sitting on screen unresponsive is *not*
+the cause — that is normal while the server runs, and it cannot be closed.
 
 **"screen not found" on macOS, with everything apparently correct** — the
 terminal is missing Screen Recording permission, so the screenshot contains only
