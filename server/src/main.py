@@ -50,11 +50,21 @@ def _read_upload():
     return payload
 
 
-def _save_debug(name: str, payload: bytes):
+def _save_debug(name: str, payload: bytes | None, image=None):
+    """Write an intermediate image for inspection, when SAVE_DEBUG_IMAGES is on.
+
+    Accepts either raw bytes or a PIL image. The screenshot is worth keeping:
+    if it shows only wallpaper, the terminal is missing macOS Screen Recording
+    permission, which otherwise presents as a mysterious matching failure.
+    """
     if not config.SAVE_DEBUG_IMAGES:
         return
     config.TMP_DIR.mkdir(parents=True, exist_ok=True)
-    (config.TMP_DIR / name).write_bytes(payload)
+    path = config.TMP_DIR / name
+    if image is not None:
+        image.save(path)
+    else:
+        path.write_bytes(payload)
     logger.debug("wrote debug image %s", name)
 
 
@@ -168,9 +178,23 @@ def paste():
     view.thumbnail((config.MAX_VIEW_SIZE, config.MAX_VIEW_SIZE))
 
     logger.debug("grabbing screenshot")
-    screen = pyscreenshot.grab()
+    try:
+        screen = pyscreenshot.grab()
+    except Exception as exc:
+        # On macOS 10.15+ a screenshot without Screen Recording permission
+        # either fails outright or silently returns the desktop wallpaper with
+        # every window stripped out - which looks like a matching failure
+        # rather than a permissions problem. Say so explicitly.
+        logger.error("screen capture failed: %s", exc)
+        return _error(
+            "could not capture the screen. On macOS, grant Screen Recording "
+            "permission to your terminal in System Settings > Privacy & "
+            "Security > Screen & System Audio Recording, then fully quit and "
+            "reopen the terminal.", 500)
+
     screen_width, screen_height = screen.size
     screen.thumbnail((config.MAX_SCREENSHOT_SIZE, config.MAX_SCREENSHOT_SIZE))
+    _save_debug("paste_screenshot.png", None, image=screen)
 
     logger.debug("locating view within screen")
     x, y = screenpoint.project(
@@ -180,7 +204,15 @@ def paste():
 
     if x == -1 and y == -1:
         logger.info("screen not found (%.2fs)", time.time() - start)
-        return jsonify({"status": "screen not found"})
+        if config.SAVE_DEBUG_IMAGES:
+            logger.info("inspect %s — if it shows only your wallpaper with no "
+                        "windows, the terminal lacks macOS Screen Recording "
+                        "permission", config.TMP_DIR / "paste_screenshot.png")
+        return jsonify({
+            "status": "screen not found",
+            "hint": "the screen must look like the photo when the request "
+                    "arrives; on macOS also check Screen Recording permission",
+        })
 
     # Scale the match back up from the downsampled screenshot.
     x = int(x / screen.size[0] * screen_width)

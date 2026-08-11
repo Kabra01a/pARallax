@@ -176,10 +176,20 @@ click Start. It listens on `127.0.0.1:10008`.
 > The Script-Fu server has **no authentication** — anything that can reach the
 > port runs arbitrary code. Keep it on localhost.
 
+> ⚠️ **Close the Script-Fu dialog after starting the server, and leave no GIMP
+> dialogs open.** Any modal window holds GIMP's main thread, so the server
+> accepts connections but never evaluates anything — pastes time out after 30s.
+
 **Photoshop** (macOS only) — set `PASTE_TARGET=photoshop` and just have it open.
 
 Either way, give the document a **non-blank background**. A blank canvas gives
 SIFT too few features to match against, so the paste lands wrong or fails.
+
+**macOS only:** grant your terminal **Screen Recording** permission in System
+Settings > Privacy & Security > Screen & System Audio Recording, then fully quit
+and reopen it. Without this, macOS silently returns screenshots containing only
+the desktop wallpaper — no windows — and `/paste` fails with "screen not found"
+for no visible reason.
 
 Verify the bridge before going further:
 
@@ -207,6 +217,8 @@ All configuration is environment-driven. Nothing secret lives in source.
 | `MAX_VIEW_SIZE` | server | `700` | Downscale cap for the camera frame |
 | `MAX_SCREENSHOT_SIZE` | server | `400` | Downscale cap for the screenshot |
 | `PASTE_TARGET` | server | `gimp` | `gimp` or `photoshop` |
+| `PASTE_MAX_FRACTION` | server | `0.4` | Scale cutouts to this fraction of the canvas |
+| `PASTE_ALLOW_UPSCALE` | server | `false` | Allow enlarging small cutouts |
 | `GIMP_HOST` / `GIMP_PORT` | server | `127.0.0.1` / `10008` | GIMP Script-Fu server address |
 | `PHOTOSHOP_APP_NAME` | server | *(auto-detect)* | Override e.g. `Adobe Photoshop 2025` |
 | `EXPO_PUBLIC_SERVER_URL` | app | `http://localhost:8080` | Local server address |
@@ -256,6 +268,11 @@ Upstream is a 2020 research prototype. pARallax:
 - **Paste placement is approximate.** Neither editor reports where its canvas
   sits on screen, so the pointed screen position is mapped proportionally onto
   the canvas rather than exactly. See `server/src/targets/base.py`.
+- **Pasted cutouts are scaled**, not placed at native resolution — a 12 MP phone
+  photo would otherwise overflow the canvas. Tune with `PASTE_MAX_FRACTION`.
+- **GIMP's UI stalls while its Script-Fu server runs**, because the plugin holds
+  the main thread. Pastes still apply; the canvas may need a manual redraw
+  (View > Fit Image in Window).
 - **SIFT is the weak link.** Low-texture screens, steep viewing angles and
   glare all cause "screen not found".
 - The cut path crops to a **fixed centre region**, so framing matters.

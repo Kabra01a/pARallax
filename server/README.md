@@ -78,8 +78,22 @@ the canvas as the pointed fraction of the screen. See `src/targets/base.py`.
 **"segmentation service unreachable"** — `SEGMENTATION_SERVICE_URL` is wrong or
 the service is down. Check with `curl`.
 
+**"GIMP did not respond within 30s"** — a modal dialog is open in GIMP, holding
+its main thread. Close every GIMP dialog, including the Script-Fu Server Options
+window, and retry.
+
+**"screen not found" on macOS, with everything apparently correct** — the
+terminal is missing Screen Recording permission, so the screenshot contains only
+wallpaper. Grant it in System Settings > Privacy & Security > Screen & System
+Audio Recording, then fully quit and reopen the terminal. With
+`SAVE_DEBUG_IMAGES=true`, check `server/tmp/paste_screenshot.png`: if it shows no
+windows, that is the cause.
+
 **"screen not found"** — SIFT could not locate the camera view in the
-screenshot. Give the Photoshop document a textured (non-blank) background,
+screenshot. Note the screenshot is taken when the request arrives, so the screen
+must look like the photo at that moment. Include distinctive UI (toolbars,
+panels) in frame — a repeating texture such as a patterned canvas gives
+ambiguous matches. Give the Photoshop document a textured (non-blank) background,
 reduce glare, and shoot the monitor closer to head-on. Set `SAVE_DEBUG_IMAGES=true`
 to inspect what the server actually received.
 

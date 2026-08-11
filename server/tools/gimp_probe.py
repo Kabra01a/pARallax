@@ -43,10 +43,66 @@ def is_bound(target, name) -> bool:
         return "unbound" not in str(exc).lower()
 
 
+def list_images(target) -> int:
+    """Show every open image and its layers.
+
+    Diagnoses the "GIMP said it pasted but I cannot see it" case: the paste goes
+    to whichever image the lister returns first, which is not necessarily the
+    one displayed on screen.
+    """
+    procs = target.procs()
+    lister = procs["images"]
+
+    raw = target.evaluate(f"({lister})")
+    print(f"({lister}) -> {raw}\n")
+
+    ids = target.evaluate(
+        f"""(let* ((raw ({lister}))
+       (v (cond ((vector? raw) raw)
+                ((and (pair? raw) (vector? (car raw))) (car raw))
+                ((and (pair? raw) (pair? (cdr raw)) (vector? (cadr raw))) (cadr raw))
+                (else #()))))
+  (vector->list v))"""
+    )
+    print(f"open image ids: {ids}")
+
+    numbers = [int(n) for n in __import__("re").findall(r"\d+", ids)]
+    if not numbers:
+        print("no images open")
+        return 1
+
+    for index, image_id in enumerate(numbers):
+        try:
+            w = target.evaluate(f"(car ({procs['image_w']} {image_id}))")
+            h = target.evaluate(f"(car ({procs['image_h']} {image_id}))")
+            layers = target.evaluate(
+                f"""(let ((ls (gimp-image-get-layers {image_id})))
+  (map (lambda (l) (car (gimp-item-get-name l)))
+       (vector->list (if (vector? ls) ls (car ls)))))"""
+            )
+            marker = "  <- index 0, this is where pARallax pastes" if index == 0 else ""
+            print(f"\n  image {image_id}: {w}x{h}{marker}")
+            print(f"    layers (top first): {layers}")
+        except Exception as exc:
+            print(f"\n  image {image_id}: could not inspect - {exc}")
+
+    if len(numbers) > 1:
+        print(f"\n{len(numbers)} images are open. pARallax pastes into image "
+              f"{numbers[0]}. If that is not the one on screen, close the others "
+              f"or bring the right one forward.")
+    return 0
+
+
 def main() -> int:
     target = GimpTarget()
 
     if len(sys.argv) > 1:
+        if sys.argv[1] in ("--images", "-i"):
+            try:
+                return list_images(target)
+            except Exception as exc:
+                print(f"ERROR: {exc}")
+                return 1
         try:
             print(target.evaluate(sys.argv[1]))
             return 0

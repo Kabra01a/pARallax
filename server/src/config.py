@@ -28,6 +28,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(_env(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 # --- Segmentation service -------------------------------------------------
 # URL of the HTTP background-removal / salient-object-detection service.
 # The upstream project relied on a community CoreWeave endpoint that is no
@@ -61,6 +68,17 @@ MAX_SCREENSHOT_SIZE = _env_int("MAX_SCREENSHOT_SIZE", 400)
 #   gimp       free, cross-platform, via the Script-Fu server (default)
 #   photoshop  macOS only, via AppleScript
 PASTE_TARGET = _env("PASTE_TARGET", "gimp")
+
+# --- Paste sizing ----------------------------------------------------------
+# A cutout arrives at whatever resolution the camera produced - a 12 MP phone
+# photo yields a ~3000x4000 layer, which on a 1920x1080 canvas hangs off every
+# edge and is useless. Scale so the layer occupies at most this fraction of the
+# canvas in both dimensions.
+PASTE_MAX_FRACTION = _env_float("PASTE_MAX_FRACTION", 0.4)
+
+# Whether a cutout smaller than the target may be scaled up. Off by default:
+# enlarging a small crop just magnifies its softness.
+PASTE_ALLOW_UPSCALE = _env("PASTE_ALLOW_UPSCALE", "false").lower() in ("1", "true", "yes")
 
 # --- GIMP ------------------------------------------------------------------
 # Script-Fu server address. Enable it in GIMP: Filters > Script-Fu > Start

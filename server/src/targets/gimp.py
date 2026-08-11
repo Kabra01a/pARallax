@@ -46,6 +46,7 @@ CANDIDATES = {
     "insert_layer": ["gimp-image-insert-layer"],
     "set_name": ["gimp-item-set-name", "gimp-layer-set-name"],
     "set_offsets": ["gimp-layer-set-offsets"],
+    "scale": ["gimp-layer-scale"],
     "flush": ["gimp-displays-flush"],
 }
 
@@ -227,20 +228,38 @@ class GimpTarget(PasteTarget):
         except Exception as exc:
             return str(exc)
 
+        # Cap the scale at 1.0 unless upscaling is explicitly allowed: enlarging
+        # a small crop only magnifies its softness.
+        max_scale = 100.0 if config.PASTE_ALLOW_UPSCALE else 1.0
+        frac = config.PASTE_MAX_FRACTION
+
         if screen_size and screen_size[0] and screen_size[1]:
             # Map the pointed fraction of the screen onto the same fraction of
-            # the canvas, then centre the pasted layer on that point.
+            # the canvas, then centre the scaled layer on that point.
             fx = min(max(x / screen_size[0], 0.0), 1.0)
             fy = min(max(y / screen_size[1], 0.0), 1.0)
-            placement = f"""  (let* ((iw (car ({p['image_w']} image)))
+        else:
+            fx = fy = None
+
+        # Scale first, then place, because placement depends on the final size.
+        # All arithmetic uses float literals; integer division in TinyScheme
+        # cannot be relied upon to produce a rational.
+        if fx is None:
+            place = f"    ({p['set_offsets']} layer {int(x)} {int(y)})"
+        else:
+            place = f"""    ({p['set_offsets']} layer
+      (inexact->exact (round (- (* iw {fx:.6f}) (/ nw 2.0))))
+      (inexact->exact (round (- (* ih {fy:.6f}) (/ nh 2.0)))))"""
+
+        placement = f"""  (let* ((iw (car ({p['image_w']} image)))
          (ih (car ({p['image_h']} image)))
          (lw (car ({p['layer_w']} layer)))
-         (lh (car ({p['layer_h']} layer))))
-    ({p['set_offsets']} layer
-      (inexact->exact (round (- (* iw {fx:.6f}) (/ lw 2))))
-      (inexact->exact (round (- (* ih {fy:.6f}) (/ lh 2))))))"""
-        else:
-            placement = f"  ({p['set_offsets']} layer {int(x)} {int(y)})"
+         (lh (car ({p['layer_h']} layer)))
+         (s (min (/ (* iw {frac:.6f}) lw) (/ (* ih {frac:.6f}) lh) {max_scale:.1f}))
+         (nw (max 1 (inexact->exact (round (* lw s)))))
+         (nh (max 1 (inexact->exact (round (* lh s))))))
+    ({p['scale']} layer nw nh FALSE)
+{place})"""
 
         script = f"""(let* ((image {active})
        (layer (car ({p['load_layer']} RUN-NONINTERACTIVE image "{path}"))))
