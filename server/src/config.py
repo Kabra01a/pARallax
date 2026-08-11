@@ -55,6 +55,20 @@ TMP_DIR = Path(_env("TMP_DIR", Path(__file__).resolve().parent.parent / "tmp"))
 MAX_VIEW_SIZE = _env_int("MAX_VIEW_SIZE", 700)
 MAX_SCREENSHOT_SIZE = _env_int("MAX_SCREENSHOT_SIZE", 400)
 
+# --- Paste target ---------------------------------------------------------
+# Which editor to paste cutouts into. See server/src/targets/.
+#
+#   gimp       free, cross-platform, via the Script-Fu server (default)
+#   photoshop  macOS only, via AppleScript
+PASTE_TARGET = _env("PASTE_TARGET", "gimp")
+
+# --- GIMP ------------------------------------------------------------------
+# Script-Fu server address. Enable it in GIMP: Filters > Script-Fu > Start
+# Server. It has NO authentication, so keep it bound to localhost.
+GIMP_HOST = _env("GIMP_HOST", "127.0.0.1")
+GIMP_PORT = _env_int("GIMP_PORT", 10008)
+GIMP_TIMEOUT = _env_int("GIMP_TIMEOUT", 30)
+
 # --- Photoshop integration ------------------------------------------------
 # Leave blank to auto-detect the running Photoshop application by name.
 PHOTOSHOP_APP_NAME = _env("PHOTOSHOP_APP_NAME", "")

@@ -20,8 +20,8 @@ from flask_cors import CORS
 from PIL import Image
 
 import config
-import ps
 import screenpoint
+import targets
 
 logging.basicConfig(
     level=logging.DEBUG if config.DEBUG else logging.INFO,
@@ -76,11 +76,21 @@ def handle_options():
 @app.route("/", methods=["GET"])
 @app.route("/ping", methods=["GET"])
 def ping():
-    return jsonify({
+    payload = {
         "status": "ok",
         "message": "pARallax server",
         "segmentation_service": config.SEGMENTATION_SERVICE_URL,
-    })
+        "paste_target": config.PASTE_TARGET,
+    }
+    try:
+        target = targets.get_target(config.PASTE_TARGET)
+        ready, detail = target.is_available()
+        payload["target_ready"] = ready
+        payload["target_detail"] = detail
+    except Exception as exc:
+        payload["target_ready"] = False
+        payload["target_detail"] = str(exc)
+    return jsonify(payload)
 
 
 @app.route("/cut", methods=["POST"])
@@ -177,14 +187,26 @@ def paste():
     y = int(y / screen.size[1] * screen_height)
     logger.info("screen coordinates: (%s, %s)", x, y)
 
-    layer_name = datetime.now().strftime("ar-cut-%Y%m%d-%H%M%S")
-    err = ps.paste(str(CUT_CACHE_PATH), layer_name, x, y)
+    layer_name = datetime.now().strftime("parallax-%Y%m%d-%H%M%S")
+    try:
+        target = targets.get_target(config.PASTE_TARGET)
+    except ValueError as exc:
+        return _error(str(exc), 500)
+
+    err = target.paste(str(CUT_CACHE_PATH), layer_name, x, y,
+                       screen_size=(screen_width, screen_height))
     if err is not None:
-        logger.error("photoshop paste failed: %s", err)
+        logger.error("%s paste failed: %s", target.display_name, err)
         return _error(err, 502)
 
     logger.info("paste completed in %.2fs", time.time() - start)
-    return jsonify({"status": "ok", "x": x, "y": y})
+    return jsonify({
+        "status": "ok",
+        "x": x,
+        "y": y,
+        "target": target.name,
+        "layer": layer_name,
+    })
 
 
 def main():
@@ -194,12 +216,22 @@ def main():
     parser.add_argument("--port", type=int, default=config.SERVER_PORT)
     parser.add_argument("--host", default=config.SERVER_HOST)
     parser.add_argument("--debug", action="store_true", default=config.DEBUG)
+    parser.add_argument("--target", default=config.PASTE_TARGET,
+                        choices=targets.available_names(),
+                        help="which editor to paste into")
     args = parser.parse_args()
 
     # CLI flags win over environment configuration.
     config.SEGMENTATION_SERVICE_URL = args.segmentation_service_url
+    config.PASTE_TARGET = args.target
 
     logger.info("segmentation service: %s", config.SEGMENTATION_SERVICE_URL)
+
+    target = targets.get_target(config.PASTE_TARGET)
+    ready, detail = target.is_available()
+    logger.info("paste target: %s — %s", target.display_name, detail)
+    if not ready:
+        logger.warning("target is not ready; /paste will fail until it is")
     logger.info("listening on http://%s:%s", args.host, args.port)
 
     app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)

@@ -1,12 +1,21 @@
-"""Adobe Photoshop integration (macOS).
+"""Adobe Photoshop paste target (macOS).
 
 Drives Photoshop via AppleScript's `do javascript`, which executes an
 ExtendScript payload inside the running application. This route does NOT need
 the Photoshop "Remote Connection" password - that is only required for the
-socket-based protocol used by the upstream project.
+socket-based protocol the upstream project used.
 
-NOTE: this module is macOS-only. A cross-platform UXP plugin is the planned
-replacement; see README "Roadmap".
+Requires a licensed desktop Photoshop. The web and Express tiers expose no
+scripting interface, so they cannot work. Use the GIMP target instead.
+
+STATUS: supported but currently unverified. The surrounding code was refactored
+into the PasteTarget interface (paste() became a method and gained the
+screen_size argument) without a licensed Photoshop available to re-test against.
+The AppleScript and ExtendScript themselves are unchanged from the working
+version. Re-run `python server/tools/check_target.py photoshop` to confirm.
+
+macOS-only by nature. A UXP plugin would make it cross-platform; see the
+roadmap in the top-level README.
 """
 
 import json
@@ -16,6 +25,8 @@ import subprocess
 from functools import lru_cache
 
 import config
+
+from .base import PasteTarget
 
 logger = logging.getLogger(__name__)
 
@@ -120,53 +131,69 @@ def _build_jsx(image_path: str, layer_name: str, dx: float, dy: float) -> str:
     """
 
 
-def paste(filename: str, layer_name: str, x: int, y: int):
-    """Paste `filename` into the active Photoshop document at screen point (x, y).
+class PhotoshopTarget(PasteTarget):
+    name = "photoshop"
+    display_name = "Adobe Photoshop"
 
-    Returns None on success, or an error string.
-    """
-    photoshop = detect_photoshop_name()
-    if not photoshop:
-        return "Photoshop does not appear to be running"
+    def is_available(self):
+        photoshop = detect_photoshop_name()
+        if not photoshop:
+            return False, ("no running Photoshop process found — open Photoshop "
+                           "with a document, or set PHOTOSHOP_APP_NAME")
+        size = get_screen_size()
+        detail = f"{photoshop}"
+        if size:
+            detail += f", screen {size[0]}x{size[1]}"
+        return True, detail
 
-    abs_path = os.path.abspath(filename)
-    if not os.path.exists(abs_path):
-        return f"image not found: {abs_path}"
+    def screen_size(self):
+        return get_screen_size()
 
-    # Translate the absolute screen point into a document-centre-relative
-    # offset, since a freshly pasted layer lands centred in the document.
-    screen = get_screen_size()
-    if screen:
-        screen_width, screen_height = screen
-        dx = x - screen_width / 2
-        dy = y - screen_height / 2
-        logger.info(
-            "screen=%sx%s point=(%s, %s) offset=(%.1f, %.1f)",
-            screen_width, screen_height, x, y, dx, dy,
-        )
-    else:
-        dx, dy = x, y
-        logger.warning("Falling back to raw coordinates - placement may drift")
+    def paste(self, image_path: str, layer_name: str, x: int, y: int,
+              screen_size=None):
+        """Paste into the active Photoshop document near screen point (x, y).
 
-    jsx = _build_jsx(abs_path, layer_name, dx, dy)
+        Returns None on success, or an error string.
+        """
+        photoshop = detect_photoshop_name()
+        if not photoshop:
+            return "Photoshop does not appear to be running"
 
-    # Embed the JSX inside an AppleScript string literal.
-    escaped = jsx.replace("\\", "\\\\").replace('"', '\\"')
-    apple_script = f"""
-    tell application {json.dumps(photoshop)}
-        activate
-        do javascript "{escaped}"
-    end tell
-    """
+        abs_path = os.path.abspath(image_path)
+        if not os.path.exists(abs_path):
+            return f"image not found: {abs_path}"
 
-    stdout, err = _run_osascript(apple_script, timeout=60)
-    if err:
-        logger.error("Photoshop paste failed: %s", err)
-        return err
+        # A freshly pasted layer lands centred in the document, so translate the
+        # absolute screen point into an offset from the centre.
+        screen = screen_size or get_screen_size()
+        if screen:
+            dx = x - screen[0] / 2
+            dy = y - screen[1] / 2
+            logger.info("screen=%sx%s point=(%s, %s) offset=(%.1f, %.1f)",
+                        screen[0], screen[1], x, y, dx, dy)
+        else:
+            dx, dy = x, y
+            logger.warning("no screen size available - placement may drift")
 
-    if stdout != "success":
-        logger.error("ExtendScript reported: %s", stdout)
-        return stdout or "unknown ExtendScript error"
+        jsx = _build_jsx(abs_path, layer_name, dx, dy)
 
-    logger.info("Pasted layer %r into %s", layer_name, photoshop)
-    return None
+        # Embed the JSX inside an AppleScript string literal.
+        escaped = jsx.replace("\\", "\\\\").replace('"', '\\"')
+        apple_script = f"""
+        tell application {json.dumps(photoshop)}
+            activate
+            do javascript "{escaped}"
+        end tell
+        """
+
+        stdout, err = _run_osascript(apple_script, timeout=60)
+        if err:
+            logger.error("Photoshop paste failed: %s", err)
+            return err
+
+        if stdout != "success":
+            logger.error("ExtendScript reported: %s", stdout)
+            return stdout or "unknown ExtendScript error"
+
+        logger.info("pasted layer %r into %s", layer_name, photoshop)
+        return None

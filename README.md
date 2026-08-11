@@ -4,16 +4,17 @@
 
 <p align="center">
   <img alt="platform" src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-informational">
-  <img alt="server" src="https://img.shields.io/badge/server-Python%203.9%2B-blue">
+  <img alt="server" src="https://img.shields.io/badge/server-Python%203.10--3.12-blue">
   <img alt="app" src="https://img.shields.io/badge/app-Expo%20SDK%2050-000020">
+  <img alt="targets" src="https://img.shields.io/badge/paste%20targets-GIMP%20%7C%20Photoshop-5C5543">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
 ---
 
 Point your phone at a real object, press and hold to **cut** it out of the world.
-Point at your monitor and release to **paste** it straight into Photoshop —
-background already removed, landing exactly where you pointed.
+Point at your monitor and release to **paste** it into GIMP or Photoshop —
+background already removed, landing where you pointed.
 
 An AR + computer vision system that closes the gap between the physical desk and
 the digital canvas.
@@ -34,7 +35,7 @@ the digital canvas.
 ```
 ┌─────────────┐   photo    ┌──────────────┐   photo   ┌────────────────────┐
 │  Mobile app │ ─────────► │ Local server │ ────────► │ Segmentation       │
-│ (Expo / RN) │            │   (Flask)    │ ◄──────── │ BiRefNet (Flask)   │
+│ (Expo / RN) │            │   (Flask)    │ ◄──────── │ u2net / BiRefNet   │
 └─────────────┘   cutout   └──────────────┘   mask    └────────────────────┘
        │                          │
        │  photo of the monitor    │ screenshot + SIFT homography
@@ -42,8 +43,8 @@ the digital canvas.
                                   │  screen coordinates
                                   │        ▼
                                   │  ┌──────────────────┐
-                                  └─►│ Adobe Photoshop  │
-                                     │ (AppleScript/JSX)│
+                                  └─►│ GIMP (Script-Fu) │
+                                     │ or Photoshop     │
                                      └──────────────────┘
 ```
 
@@ -56,7 +57,7 @@ phone (and cached for the paste step).
 screenshot, then uses SIFT keypoints + FLANN matching + a RANSAC homography to
 work out *where on the screen* the camera was pointing. Those coordinates are
 converted into a document-relative offset and the cached cutout is pasted into
-the active Photoshop document as a new layer.
+the active document as a new layer, via a pluggable target (GIMP or Photoshop).
 
 ---
 
@@ -76,13 +77,17 @@ server/                 Flask local server
     main.py             HTTP API: /ping, /cut, /paste
     config.py           Env-driven configuration
     screenpoint.py      SIFT homography: locate camera view within screenshot
-    ps.py               Photoshop integration (macOS, AppleScript + ExtendScript)
+    targets/
+      base.py           PasteTarget interface and coordinate-space notes
+      gimp.py           GIMP via the Script-Fu server (TCP, cross-platform)
+      photoshop.py      Photoshop via AppleScript (macOS only)
   tools/
-    check_photoshop.py  Diagnostic for the Photoshop integration
+    check_target.py     Diagnostic for whichever target is configured
 
-segmentation/           BiRefNet background-removal service
+segmentation/           Background-removal service (u2net / BiRefNet)
   service.py            HTTP API: mask and cutout endpoints
-  config.py             Model selection and inference tuning
+  config.py             Model tiers and inference tuning
+  session.py            Provider selection with graceful degradation
   bench.py              Latency benchmark across models
 ```
 
@@ -99,12 +104,15 @@ segmentation/           BiRefNet background-removal service
   that binary explicitly.
 - A phone with the [Expo Go](https://expo.dev/go) app, on the **same Wi-Fi**
   as your computer
-- Adobe Photoshop (macOS) with a document open
+- An editor to paste into, with a document open — **[GIMP](https://www.gimp.org)**
+  (free, any OS) or a licensed desktop Adobe Photoshop (macOS only; the web and
+  Express tiers have no scripting interface)
 - A reachable background-removal HTTP service (see below)
 
 ### 1. Segmentation service
 
-Runs **BiRefNet** locally — no GPU and no third-party endpoint required.
+Runs locally — no GPU and no third-party endpoint required. Defaults to `u2net`
+(~750 ms); `birefnet-general-lite` gives better edges at ~10s.
 
 ```bash
 cd segmentation
@@ -136,9 +144,8 @@ cp .env.example .env      # then edit .env
 python src/main.py
 ```
 
-Verify it's alive: `curl http://localhost:8080/ping`
-
-Verify Photoshop is wired up: `python tools/check_photoshop.py`
+Verify it's alive: `curl http://localhost:8080/ping` — the response reports
+which paste target is configured and whether it's reachable.
 
 ### 3. Mobile app
 
@@ -155,10 +162,30 @@ Scan the QR code with Expo Go.
 > `localhost` will not work from a physical device — you must use the LAN IP of
 > the machine running the server (e.g. `http://192.168.1.29:8080`).
 
-### 4. Photoshop
+### 4. The editor
 
-Open a document with a non-blank background. A blank canvas gives SIFT too few
-features to match against, and the paste will land in the wrong place or fail.
+**GIMP** (default, free, cross-platform):
+
+```bash
+brew install --cask gimp     # or download from gimp.org
+```
+
+Open GIMP, create a document, then **Filters → Script-Fu → Start Server** and
+click Start. It listens on `127.0.0.1:10008`.
+
+> The Script-Fu server has **no authentication** — anything that can reach the
+> port runs arbitrary code. Keep it on localhost.
+
+**Photoshop** (macOS only) — set `PASTE_TARGET=photoshop` and just have it open.
+
+Either way, give the document a **non-blank background**. A blank canvas gives
+SIFT too few features to match against, so the paste lands wrong or fails.
+
+Verify the bridge before going further:
+
+```bash
+python tools/check_target.py
+```
 
 ---
 
@@ -179,6 +206,8 @@ All configuration is environment-driven. Nothing secret lives in source.
 | `SAVE_DEBUG_IMAGES` | server | `false` | Dump intermediates to `server/tmp/` |
 | `MAX_VIEW_SIZE` | server | `700` | Downscale cap for the camera frame |
 | `MAX_SCREENSHOT_SIZE` | server | `400` | Downscale cap for the screenshot |
+| `PASTE_TARGET` | server | `gimp` | `gimp` or `photoshop` |
+| `GIMP_HOST` / `GIMP_PORT` | server | `127.0.0.1` / `10008` | GIMP Script-Fu server address |
 | `PHOTOSHOP_APP_NAME` | server | *(auto-detect)* | Override e.g. `Adobe Photoshop 2025` |
 | `EXPO_PUBLIC_SERVER_URL` | app | `http://localhost:8080` | Local server address |
 | `EXPO_PUBLIC_REQUEST_TIMEOUT_MS` | app | `30000` | Client request timeout |
@@ -221,7 +250,12 @@ Upstream is a 2020 research prototype. pARallax:
 
 ## Known limitations
 
-- **macOS only** for the Photoshop integration (AppleScript).
+- **The Photoshop target is macOS only** and needs a licensed desktop install;
+  the web and Express tiers expose no scripting interface. The GIMP target works
+  anywhere and is free, which is why it is the default.
+- **Paste placement is approximate.** Neither editor reports where its canvas
+  sits on screen, so the pointed screen position is mapped proportionally onto
+  the canvas rather than exactly. See `server/src/targets/base.py`.
 - **SIFT is the weak link.** Low-texture screens, steep viewing angles and
   glare all cause "screen not found".
 - The cut path crops to a **fixed centre region**, so framing matters.
@@ -245,8 +279,11 @@ Upstream is a 2020 research prototype. pARallax:
       CoreML cannot compile it
 - [ ] Swap SIFT for a learned matcher (LightGlue / LoFTR) to kill "screen not found"
 - [ ] On-device inference (ONNX / CoreML / TFLite) — remove the server round-trip
-- [ ] Photoshop **UXP plugin** to replace AppleScript and go cross-platform
-- [ ] Additional paste targets: Figma, Blender, system clipboard
+- [ ] Exact canvas mapping — targets currently approximate, since neither editor
+      reports its canvas rect on screen
+- [x] Pluggable paste targets — GIMP (Script-Fu, cross-platform) and Photoshop
+- [ ] Re-verify the Photoshop target against a licensed install
+- [ ] More targets: Figma, Blender, system clipboard, local web canvas
 - [ ] Interactive crop / refine step instead of the fixed centre crop
 - [ ] Upgrade Expo SDK and migrate the deprecated `Camera` API to `CameraView`
 
