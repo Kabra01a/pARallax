@@ -34,7 +34,7 @@ the digital canvas.
 ```
 ┌─────────────┐   photo    ┌──────────────┐   photo   ┌────────────────────┐
 │  Mobile app │ ─────────► │ Local server │ ────────► │ Segmentation       │
-│ (Expo / RN) │            │   (Flask)    │ ◄──────── │ service (HTTP)     │
+│ (Expo / RN) │            │   (Flask)    │ ◄──────── │ BiRefNet (Flask)   │
 └─────────────┘   cutout   └──────────────┘   mask    └────────────────────┘
        │                          │
        │  photo of the monitor    │ screenshot + SIFT homography
@@ -79,6 +79,11 @@ server/                 Flask local server
     ps.py               Photoshop integration (macOS, AppleScript + ExtendScript)
   tools/
     check_photoshop.py  Diagnostic for the Photoshop integration
+
+segmentation/           BiRefNet background-removal service
+  service.py            HTTP API: mask and cutout endpoints
+  config.py             Model selection and inference tuning
+  bench.py              Latency benchmark across models
 ```
 
 ---
@@ -87,7 +92,11 @@ server/                 Flask local server
 
 ### Prerequisites
 
-- Python 3.9+ and Node 18+
+- **Python 3.10–3.12** and Node 18+
+  <br>The upper bound is not cosmetic: `onnxruntime` ships no wheels for CPython
+  3.13 or 3.14, and the segmentation service depends on it. On a Mac whose
+  default `python3` is newer, `brew install python@3.12` and point each venv at
+  that binary explicitly.
 - A phone with the [Expo Go](https://expo.dev/go) app, on the **same Wi-Fi**
   as your computer
 - Adobe Photoshop (macOS) with a document open
@@ -95,12 +104,25 @@ server/                 Flask local server
 
 ### 1. Segmentation service
 
-The `/cut` endpoint delegates background removal to an HTTP service that accepts
-an image and returns a grayscale saliency mask.
+Runs **BiRefNet** locally — no GPU and no third-party endpoint required.
 
-> ⚠️ Upstream pointed at a public CoreWeave U²-Net endpoint from 2020. **Do not
-> rely on it** — it is no longer guaranteed to exist. Run your own service and
-> set `SEGMENTATION_SERVICE_URL` accordingly.
+```bash
+cd segmentation
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python service.py --preload
+```
+
+Listens on `:8081`, which is the local server's default, so the two connect with
+no configuration. `--preload` downloads the model weights at startup instead of
+stalling the first cut.
+
+Full details, model options and benchmarking in [segmentation/](segmentation/).
+
+> Upstream depended on a public CoreWeave U²-Net endpoint from 2020 that is no
+> longer dependable. pARallax bundles its own service instead, so the project is
+> self-contained.
 
 ### 2. Local server
 
@@ -147,6 +169,10 @@ All configuration is environment-driven. Nothing secret lives in source.
 | Variable | Where | Default | Purpose |
 |---|---|---|---|
 | `SEGMENTATION_SERVICE_URL` | server | `http://localhost:8081` | Background-removal endpoint |
+| `MODEL_NAME` | segmentation | `u2net` | Model — `u2net` fast, `birefnet-general-lite` higher quality |
+| `PROVIDERS` | segmentation | `auto` | Execution providers (rembg ignores CoreML by default) |
+| `POST_PROCESS_MASK` | segmentation | `true` | Morphological mask cleanup |
+| `ALPHA_MATTING` | segmentation | `false` | Finer edges, slower on CPU |
 | `SEGMENTATION_TIMEOUT` | server | `30` | Request timeout (seconds) |
 | `SERVER_HOST` / `SERVER_PORT` | server | `0.0.0.0` / `8080` | Bind address |
 | `CORS_ORIGINS` | server | `*` | Comma-separated allowed origins |
@@ -200,15 +226,23 @@ Upstream is a 2020 research prototype. pARallax:
   glare all cause "screen not found".
 - The cut path crops to a **fixed centre region**, so framing matters.
 - Paste assumes **fixed document dimensions**; other sizes drift.
-- Requires a **network round-trip** per cut, so latency tracks your service.
-- Struggles with **transparent, reflective and very thin** structures.
+- Requires a **round-trip to the segmentation service** per cut. Running it
+  locally removes the internet dependency but CPU inference still costs time —
+  benchmark your own machine with `segmentation/bench.py`.
+- Fanless machines **thermally throttle** under repeated cuts.
 
 ---
 
 ## Roadmap
 
-- [ ] Replace BASNet-era segmentation with a modern dichotomous / matting model
-- [ ] Benchmark old vs. new on a fixed test set (measured MAE / F-measure, not cited)
+- [x] Self-hosted segmentation service — no GPU, no third-party endpoint
+- [x] Measure latency across models on real hardware — see
+      [segmentation/README](segmentation/README.md#measured-results)
+- [x] Two-tier model choice: fast interactive default, opt-in quality mode
+- [ ] Benchmark segmentation *accuracy* on a fixed test set (measured MAE /
+      F-measure, not cited from papers)
+- [ ] Find a quality model that runs in under 2s on CPU — BiRefNet cannot, and
+      CoreML cannot compile it
 - [ ] Swap SIFT for a learned matcher (LightGlue / LoFTR) to kill "screen not found"
 - [ ] On-device inference (ONNX / CoreML / TFLite) — remove the server round-trip
 - [ ] Photoshop **UXP plugin** to replace AppleScript and go cross-platform
@@ -223,6 +257,10 @@ Upstream is a 2020 research prototype. pARallax:
 Built on [cyrildiagne/ar-cutpaste](https://github.com/cyrildiagne/ar-cutpaste) by
 Cyril Diagne (MIT).
 
+- **BiRefNet** — Zheng et al., *Bilateral Reference for High-Resolution Dichotomous
+  Image Segmentation*, CAAI AIR 2024 — [code](https://github.com/ZhengPeng7/BiRefNet) (MIT)
+- **rembg** — [danielgatis/rembg](https://github.com/danielgatis/rembg), model
+  runtime and weight distribution (MIT)
 - **BASNet** — Qin et al., *Boundary-Aware Salient Object Detection*, CVPR 2019
 - **PiCANet** — Liu et al., *Learning Pixel-wise Contextual Attention*, CVPR 2018
 - **FPN** — Lin et al., *Feature Pyramid Networks*, CVPR 2017

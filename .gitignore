@@ -28,12 +28,18 @@ web-report/
 npm-debug.*
 yarn-error.log
 
-# ---- Runtime artifacts (debug image dumps) ----
+# ---- Runtime artifacts (debug image dumps, curl test output) ----
 server/*.png
 server/*.jpg
 server/*.jpeg
 server/tmp/
+segmentation/*.png
+segmentation/*.jpg
+segmentation/*.jpeg
+segmentation/tmp/
 *.psd
+
+# Deliberate demo assets live in assets/ and are committed normally.
 
 # ---- Editors & OS ----
 .vscode/
